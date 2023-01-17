@@ -1,21 +1,64 @@
 import json
 import bitarray
-from find_recipes_simple import process_recipe
-import time
 import sys
+import signal
+import os
+from multiprocessing import Pool, RLock, Manager, freeze_support
+from find_recipes_simple import process_recipe
+from tqdm import tqdm, trange
+from constants import Num_Ingredients_Max, Num_Parts, Num_Ingredients_Total, Num_Recipe_Per_Part, Num_Recipe_Last_Part, Main_Record_Size
 
-PROCESS_SIZE = 50000000
-def execute_find_recipe(item_str, recipe_data):
-    if not item_str:
-        return 0, 0
-    hp_crit, hp, price = process_recipe(recipe_data, item_str)
-   
-    # crit increases hp by 12, we just need to store if it's different
-    crit_different = hp_crit != hp
-    main_data = ((price << 7) + hp) & 0xFFFF
-    return main_data, crit_different
+# This script produces data folder which contains 3 databases:
+# main db: This is the database containing the non-crit hp value and price for every recipe
+# crit db: This is the database containing if the crit hp of a recipe is different from non-crit hp
+# four db: This is the database containing if the crit hp of a recipe is 4 more than the base hp
 
-NUM_INGR = 5
+DATA_DIR = "../data"
+
+def count_one_bit(i):
+    if i < 0:
+        raise ValueError(f"negative {i=}")
+    count = 0
+    while i > 0:
+        if (i & 1):
+            count += 1
+        i = i >> 1
+    return count
+
+# Adapters should all have get_data(liss_of_items) -> base_hp, price, crit_flag, hearty_flag, monster_flag interface
+class AbstractAdapter:
+    def cook(self, items):
+        base_hp, price, crit_flag, hearty_flag, monster_flag = self.get_data(items)
+        assert 0 <= base_hp <= 120
+        lower_2_bytes = ((price << 7) + base_hp) & 0xFFFF
+        crit_flag = 1 << 22 if crit_flag else 0
+        hearty_flag = 1 << 21 if hearty_flag else 0
+        monster_flag = 1 << 20 if monster_flag else 0
+
+        lower_23_bits = lower_2_bytes | crit_flag | hearty_flag | monster_flag
+        # if lower 23 bits has odd number of 1s, set parity bit to 1
+        parity_bit = 1 << 23 if (count_one_bit(lower_23_bits) & 1) else 0
+        return parity_bit | lower_23_bits
+
+    def get_data(self, items):
+        pass
+
+class BrkirchRecipeAdapter(AbstractAdapter):
+    def __init__(self):
+        super().__init__()
+        with open("recipeData.json", "r", encoding="utf-8") as recipe_file:
+            self.recipe_data = json.load(recipe_file)
+
+    def get_data(self, items):
+        if not items:
+            return 0, 0, False, False, False
+        item_str = ",".join(items)
+        return process_recipe(self.recipe_data, item_str)
+
+def get_adapter(id):
+    if id == "brkirch":
+        return BrkirchRecipeAdapter()
+    raise ValueError(f"Invalid adapter {id=}")
 
 def array2d(first_order, second_order):
     array = [None] * first_order
@@ -23,37 +66,38 @@ def array2d(first_order, second_order):
         array[i] = [0] * second_order
     return array
 
+# given id_data which contains a list of items, it will iterate from start to end as if indices in the multichoose set of the items
 class RecipeIterator:
     def __init__(self, id_data, start, end):
         self.current = start
         self.end = end
         self.id_data = id_data
         self.num_items = len(id_data)
-        data = array2d(NUM_INGR+1, self.num_items+1)
-        bino = array2d(self.num_items+NUM_INGR, NUM_INGR+1)
+        data = array2d(Num_Ingredients_Max+1, self.num_items+1)
+        bino = array2d(self.num_items+Num_Ingredients_Max, Num_Ingredients_Max+1)
         # binomial(n, k), k<=NUM_INGR is bino[n][k]
 
         # Compute binomial with dynamic programming
-        for n in range(self.num_items+NUM_INGR):
+        for n in range(self.num_items+Num_Ingredients_Max):
             bino[n][0] = 1
 
-        for k in range(NUM_INGR+1):
+        for k in range(Num_Ingredients_Max+1):
             bino[k][k] = 1
 
-        for n in range(1,self.num_items+NUM_INGR):
-            for k in range(1, NUM_INGR+1):
+        for n in range(1,self.num_items+Num_Ingredients_Max):
+            for k in range(1, Num_Ingredients_Max+1):
                 bino[n][k] = bino[n-1][k-1] + bino[n-1][k]
 
         # data[i][m] is size of choosing i ingredients from m, so bino[i+m-1][i]
         for m in range(self.num_items+1):
             data[0][m] = 1
 
-        for i in range(1, NUM_INGR+1):
+        for i in range(1, Num_Ingredients_Max+1):
             for m in range(self.num_items+1):
                 data[i][m] = bino[i+m-1][i]
         
         self.data = data
-        self.total = data[NUM_INGR][self.num_items]
+        self.total = data[Num_Ingredients_Max][self.num_items]
     
     def get_total(self):
         return self.total
@@ -61,7 +105,7 @@ class RecipeIterator:
     def __iter__(self):
         return self
     def __next__(self):
-        if self.current >= self.end:
+        if self.current >= self.end or self.current >= self.total:
             raise StopIteration
         input = self.current    
         self.current += 1
@@ -70,15 +114,15 @@ class RecipeIterator:
         items = []
         good = False
 
-        for item in range(NUM_INGR):
+        for item in range(Num_Ingredients_Max):
             index = 0
             for m in range(self.num_items-rest_items+1, self.num_items+1):
-                if index + self.data[NUM_INGR-1-item][self.num_items-m+1] > input:
+                if index + self.data[Num_Ingredients_Max-1-item][self.num_items-m+1] > input:
                     items.append(m-1)
                     good = True
                     break
                 
-                index += self.data[NUM_INGR-1-item][self.num_items-m+1]
+                index += self.data[Num_Ingredients_Max-1-item][self.num_items-m+1]
             
             if not good:
                 break
@@ -87,66 +131,84 @@ class RecipeIterator:
             input -= index
         
         if good:
-            items = [self.id_data[i] for i in items if i != 0]
-            return ",".join(items)
+            return [self.id_data[i] for i in items if i != 0]
 
         else:
             raise StopIteration
-
-sample = "[08]========================= 100%    "
-
         
-def run_dump(part, is_multi=True):
-    screen_x = (part % 4) * 38 + 1
-    screen_y = int(part/4) + 1
-    part_str = f"[0{part}]" if part < 10 else f"[{part}]"
-    def update_progress(permillage):
-        percentage = int(permillage/10)
-        if percentage >= 100:
-            progress_bar = "="*25
-        else:
-            progress_bar = "="*int(percentage/4)+">"
-        if is_multi:
-            sys.stdout.write("\x1b7\x1b[%d;%df%s\x1b8" % (screen_y, screen_x, f"{part_str}{progress_bar} {permillage/10}%"))
-        else:
-            print(f"\r{part_str}{progress_bar} {permillage/10}%", end="")
-        sys.stdout.flush()
-    
+def run_dump(task):
+    adapter_id, part = task
+    assert 0 <= part < Num_Parts
     # Load the items
     with open("../ids.json", "r", encoding="utf-8") as ids_file:
         id_data_dict = json.load(ids_file)
-
     id_data = []
     for k in id_data_dict:
         id_data.append(id_data_dict[k])
+    assert len(id_data) == Num_Ingredients_Total
 
-    with open("recipeData.json", "r", encoding="utf-8") as recipe_file:
-        recipe_data = json.load(recipe_file)
+    # Create Adapter
 
-    recipes = RecipeIterator(id_data, part*PROCESS_SIZE,(part+1)*PROCESS_SIZE)
-    crit_buffer = bitarray.bitarray(endian='little')
+    adapter = get_adapter(adapter_id)
 
-    progress = 0
-    permillage = 0
-    update_progress(0)
+    # Initialize Dumper
 
-    with open(f"parts/main{part}.db", "wb") as main_db:
-        for recipe in recipes:
-            main_data, crit_flag = execute_find_recipe(recipe, recipe_data)
-            crit_buffer.append(crit_flag)
-            main_db.write(bytearray(main_data.to_bytes(2, "big")))
-            progress += 1
-            new_permillage = int(progress*1000/PROCESS_SIZE)
-            if new_permillage != permillage:
-                update_progress(new_permillage)
-                permillage = new_permillage
+    recipes = RecipeIterator(id_data, part*Num_Recipe_Per_Part,(part+1)*Num_Recipe_Per_Part)
 
-    update_progress(1000)
-    with open(f"parts/crit{part}.db", "wb") as crit_db:
-        crit_db.write(crit_buffer.tobytes())
+    # Set up tqdm for progress reporting
 
-    if not is_multi:
-        print()
+    total = Num_Recipe_Last_Part if part == Num_Parts-1 else Num_Recipe_Per_Part
+    desc = f"Part {part:02}"
+
+    try:
+        with open(os.path.join(DATA_DIR, f"{part:02}.db"), "wb") as main_db:
+            for recipe in tqdm(recipes, total=total, desc=desc, position=part):
+                # get recipe from adapter
+                main_data = adapter.cook(recipe)
+                # write main_db. python io is buffered by default
+                main_db.write(bytearray(main_data.to_bytes(Main_Record_Size, "big")))
+    except KeyboardInterrupt:
+        pass
+
+def run_multi(adapter_id):
+    # Check if output exists
+    if os.path.exists(DATA_DIR):
+        if "-f" not in sys.argv:
+            print(f"The data directory ({DATA_DIR}) exists. Rename or it to start dumping")
+            sys.exit(1)
+        else:
+            answer = input(f"The data directory ({DATA_DIR}) exists. Continue [y/n]?")
+            if answer != "y":
+                sys.exit(1)
+    
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    # Define jobs
+    def jobs():
+        for part in range(Num_Parts):
+            yield adapter_id, part
+
+    # Init Pool
+    tqdm.set_lock(RLock())  # for managing output contention
+    
+    try:
+        with Pool(initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as p:
+            for _ in p.imap_unordered(run_dump, jobs()):
+                pass
+    except KeyboardInterrupt:
+        if os.name == 'nt':
+            os.system('cls')
+        # for mac and linux(here, os.name is 'posix')
+        else:
+            os.system('clear')
+        print("Interrupted!")
+        sys.exit(1)
+
+    print("All Done! Run python3 check.py to verify the dumped data is good")
 
 if __name__ == "__main__":
-    run_dump(int(sys.argv[1]), False)
+    freeze_support()
+    adapter = "brkirch"
+    if len(sys.argv) > 1:
+        adapter = sys.argv[1]
+    run_multi(adapter)

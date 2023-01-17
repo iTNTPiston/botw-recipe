@@ -41,142 +41,12 @@
 
 import numpy as np
 import json
-from enum import IntFlag
 import sys
-import re
 
-class weaponModifiers(IntFlag):
-    GuardUp = 0b100000000
-    SurfUp = 0b010000000
-    QuickShot = 0b001000000
-    Zoom = 0b000100000
-    MultiShot = 0b000010000
-    LongThrow = 0b000001000
-    CriticalHit = 0b000000100
-    DurabilityUp = 0b000000010
-    AttackUp = 0b000000001
+######### LEGACY START
 
-def checkVersion(recipeData):
-    if isinstance(recipeData[-1], int):
-        return recipeData[-1]
-    else:
-        return 0
-
-def parseIngredient(ingredient):
-    return [ingredient]
-
-def parseRecipe(recipe, materialData):
-    materialsList = []
-    recipeSlots = [ingredient.strip() for ingredient in recipe.split(',')]
-    if len(recipeSlots) > 5: raise Exception("Recipes can have at most 5 ingredients")
-    recipeSlotsLen = len(recipeSlots)
-    recipeDifferGroups = [None for _ in range(recipeSlotsLen)]
-    recipeSameGroups = [None for _ in range(recipeSlotsLen)]
-    recipeDifferGroupNum, recipeSameGroupNum = 0, 0
-    for recipeSlotIndex in range(recipeSlotsLen):
-        def doMaterialAppend(materialNames, differGroup):
-            nonlocal recipeSlots, recipeSlotIndex, recipeDifferGroups, recipeDifferGroupNum, recipeSameGroups, recipeSameGroupNum
-            for materialNameIndex, materialName in enumerate(materialNames):
-                if materialNameIndex == 0:
-                    recipeSlots[recipeSlotIndex] = materialName.lower()
-                else:
-                    recipeSlots.append(materialName.lower())
-                    if differGroup:
-                        recipeDifferGroups.append(recipeDifferGroupNum)
-                        recipeSameGroups.append(None)
-                    else:
-                        recipeDifferGroups.append(None)
-                        recipeSameGroups.append(recipeSameGroupNum)
-            if len(materialNames) > 1 and differGroup:
-                recipeDifferGroups[recipeSlotIndex] = recipeDifferGroupNum
-                recipeDifferGroupNum += 1
-            elif len(materialNames) > 1:
-                recipeSameGroups[recipeSlotIndex] = recipeSameGroupNum
-                recipeSameGroupNum += 1
-        recipeSlot = recipeSlots[recipeSlotIndex]
-        def checkForPrefix(numAppend):
-            nonlocal recipeSlot, recipeSlotIndex, recipeSlots
-            if recipeSlots[recipeSlotIndex].strip().lower().startswith("different ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("distinct ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("unique ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("differing "):
-                recipeSlots[recipeSlotIndex] = recipeSlots[recipeSlotIndex].strip().split(' ', 1)[1]
-                doMaterialAppend([recipeSlots[recipeSlotIndex] for _ in range(numAppend)], True)
-            elif recipeSlots[recipeSlotIndex].strip().lower().startswith("same ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("of the same ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("identical ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("like ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("alike ") or recipeSlots[recipeSlotIndex].strip().lower().startswith("matching "):
-                if recipeSlots[recipeSlotIndex].strip().lower().startswith("of the same "):
-                    recipeSlots[recipeSlotIndex] = recipeSlots[recipeSlotIndex].strip()[12:]
-                else:
-                    recipeSlots[recipeSlotIndex] = recipeSlots[recipeSlotIndex].strip().split(' ', 1)[1]
-                doMaterialAppend([recipeSlots[recipeSlotIndex] for _ in range(numAppend)], False)
-            else:
-                return True
-            return False
-        if len(recipeSlot) > 1:
-            if (ingredientCount := recipeSlot[0]).isdigit() and ingredientCount != '0':
-                if recipeSlot[1].lower() == 'x':
-                    recipeSlots[recipeSlotIndex] = recipeSlot[2:]
-                else:
-                    recipeSlots[recipeSlotIndex] = recipeSlot[1:]
-                if checkForPrefix(int(ingredientCount)):
-                    for _ in range(int(ingredientCount) - 1):
-                        recipeSlots.append(recipeSlots[recipeSlotIndex])
-                        recipeDifferGroups.append(None)
-                        recipeSameGroups.append(None)
-            elif (ingredientCount := recipeSlot[-1]).isdigit() and ingredientCount != '0' and recipeSlot[-2].lower() == 'x':
-                recipeSlots[recipeSlotIndex] = recipeSlot[:-2]
-                for _ in range(int(ingredientCount) - 1):
-                    recipeSlots.append(recipeSlots[recipeSlotIndex])
-                    recipeDifferGroups.append(None)
-                    recipeSameGroups.append(None)
-            elif recipeSlot.lower().startswith("one "):
-                recipeSlots[recipeSlotIndex] = recipeSlot[4:]
-            elif recipeSlot.lower().startswith("two "):
-                recipeSlots[recipeSlotIndex] = recipeSlot[4:]
-                if checkForPrefix(2):
-                    for _ in range(1):
-                        recipeSlots.append(recipeSlots[recipeSlotIndex])
-                        recipeDifferGroups.append(None)
-                        recipeSameGroups.append(None)
-            elif recipeSlot.lower().startswith("three "):
-                recipeSlots[recipeSlotIndex] = recipeSlot[6:]
-                if checkForPrefix(3):
-                    for _ in range(2):
-                        recipeSlots.append(recipeSlots[recipeSlotIndex])
-                        recipeDifferGroups.append(None)
-                        recipeSameGroups.append(None)
-            elif recipeSlot.lower().startswith("four "):
-                recipeSlots[recipeSlotIndex] = recipeSlot[5:]
-                if checkForPrefix(4):
-                    for _ in range(3):
-                        recipeSlots.append(recipeSlots[recipeSlotIndex])
-                        recipeDifferGroups.append(None)
-                        recipeSameGroups.append(None)
-            elif recipeSlot.lower().startswith("five "):
-                recipeSlots[recipeSlotIndex] = recipeSlot[5:]
-                if checkForPrefix(5):
-                    for _ in range(4):
-                        recipeSlots.append(recipeSlots[recipeSlotIndex])
-                        recipeDifferGroups.append(None)
-                        recipeSameGroups.append(None)
-    if len(recipeSlots) > 5: raise Exception("Recipes can have at most 5 ingredients")
-    for recipeSlot in recipeSlots:
-        materialsListSlot = []
-        recipeSlot = [ingredient.strip() for ingredient in re.split('/|\\||:| or ', recipeSlot.lower())]
-        recipeSlotLen = len(recipeSlot)
-        for recipeSlotIndex in range(recipeSlotLen):
-            ingredientsList = parseIngredient(recipeSlot[recipeSlotIndex])
-            recipeSlot[recipeSlotIndex] = ingredientsList[0].lower()
-            if len(ingredientsList) > 1:
-                for ingredient in ingredientsList[1:]:
-                    recipeSlot.append(ingredient.lower())
-        for ingredient in recipeSlot:
-            for materialIndex in range(len(materialData)):
-                if materialData[materialIndex]['Name'].lower() == ingredient:
-                    break
-            else:
-                raise Exception("\"" + ingredient + "\" is not a recognized material name")
-            materialsListSlot.append(materialIndex)
-        materialsList.append(materialsListSlot)
-    return (materialsList, recipeDifferGroups, recipeSameGroups)
-
-def getPrice(NMMR, sellTotal, buyTotal, ingredientCount):
+# DO NOT TOUCH THIS
+def legacy_get_price(NMMR, sellTotal, buyTotal, ingredientCount):
     if ingredientCount > 5:
         ingredientCount = 5
     sellTotal = int(np.float32(sellTotal) * NMMR[ingredientCount - 1])
@@ -189,112 +59,42 @@ def getPrice(NMMR, sellTotal, buyTotal, ingredientCount):
         sellTotal = 2
     return sellTotal
 
-def addRecipePrefix(recipeName, effectType):
-    if effectType == "ResistHot":
-        recipeName = "Chilly " + recipeName
-    elif effectType == "ResistCold":
-        recipeName = "Spicy " + recipeName
-    elif effectType == "ResistElectric":
-        recipeName = "Electro " + recipeName
-    elif effectType == "Quietness":
-        recipeName = "Sneaky " + recipeName
-    elif effectType == "GutsRecover":
-        recipeName = "Energizing " + recipeName
-    elif effectType == "ExGutsMaxUp":
-        recipeName = "Enduring " + recipeName
-    elif effectType == "MovingSpeed":
-        recipeName = "Hasty " + recipeName
-    elif effectType == "AttackUp":
-        recipeName = "Mighty " + recipeName
-    elif effectType == "DefenseUp":
-        recipeName = "Tough " + recipeName
-    elif effectType == "Fireproof":
-        recipeName = "Fireproof " + recipeName
-    elif effectType == "LifeMaxUp":
-        recipeName = "Hearty " + recipeName
-    return recipeName
+# DO NOT TOUCH THIS
+def legacy_match_single_recipe(cookData, recipe, recipeTags):
+    for checkRecipe in cookData['SingleRecipes']:
+        hasMatched = True
+        recipeIndexes = set(range(len(recipe)))
+        if 'Actors' in checkRecipe and checkRecipe['Actors'] != []:
+            hasMatched = False
+            for ingredient in checkRecipe['Actors']:
+                for recipeIndex in recipeIndexes:
+                    if recipe[recipeIndex] == ingredient:
+                        ingredientName = recipe[recipeIndex]
+                        recipeIndexes = [recipeIndex for recipeIndex in recipeIndexes if not recipe[recipeIndex] == ingredientName]
+                        hasMatched = True
+                        break
+                if hasMatched: break
+            if not hasMatched: continue
+        if 'Tags' in checkRecipe and checkRecipe['Tags'] != []:
+            hasMatched = False
+            for tag in checkRecipe['Tags']:
+                if tag == []:
+                    continue
+                else:
+                    tag = tag[0]
+                for recipeIndex in recipeIndexes:
+                    if tag in recipeTags[recipeIndex]:
+                        ingredientName = recipe[recipeIndex]
+                        recipeIndexes = [recipeIndex for recipeIndex in recipeIndexes if not recipe[recipeIndex] == ingredientName]
+                        hasMatched = True
+                        break
+                if hasMatched: break
+            if not hasMatched: continue
+        return checkRecipe
+    return {"Recipe": "Dubious Food"}
 
-def verifyRecipe(cookData, materialData, materialsList: list):
-    effectType, cookValue, critChance, numUnique, recipe, recipeList, recipeTags, ingredientIndexes = False, 0, 0, 0, [], [], [], []
-    materialsList = materialsList.copy()
-    dubiousValue = 0
-    for materialNameIndex in range(len(materialsList)):
-        if len(materialsList[materialNameIndex]) > 1:
-            if materialNameIndex > 0 and materialsList[materialNameIndex-1][0] in materialsList[materialNameIndex]: 
-                materialsList[materialNameIndex] = \
-                [materialsList[materialNameIndex][materialTruncateIndex] for materialTruncateIndex in range(materialsList[materialNameIndex].index(materialsList[materialNameIndex-1][0]), len(materialsList[materialNameIndex]))]
-            materialNameList = materialsList[materialNameIndex]
-            for materialName in materialNameList:
-                materialsList[materialNameIndex] = [materialName]
-                recipeList += verifyRecipe(materialsList)
-            return recipeList
-    for materialNameIndex in range(len(materialsList)):
-        material = materialData[materialsList[materialNameIndex][0]]
-        ingredientIndexes.append(materialsList[materialNameIndex][0])
-        recipe.append(material['Name'])
-        if material['EffectType'] != "None":
-            if effectType == False and material['EffectType'] != "None":
-                effectType = material['EffectType']
-            elif effectType != "None" and effectType != False and material['EffectType'] != effectType:
-                effectType = "None"
-        if material['EffectType'] == "LifeMaxUp":
-            dubiousValue += material['HitPointRecover'] + 4
-        cookValue += material['HitPointRecover'] * 2
-        if materialsList.index(materialsList[materialNameIndex]) == materialNameIndex:
-            cookValue += material['BoostHitPointRecover']
-            critChance += material['BoostSuccessRate']
-            numUnique += 1
-        recipeTags.append(material['Tags'])
-    if cookValue > 120: cookValue = 120
-    if critChance > 100: critChance = 100
-    if dubiousValue < 4: dubiousValue = 4
-    if numUnique == 1:
-        for checkRecipe in cookData['SingleRecipes']:
-            hasMatched = True
-            recipeIndexes = set(range(len(recipe)))
-            if 'Actors' in checkRecipe and checkRecipe['Actors'] != []:
-                hasMatched = False
-                for ingredient in checkRecipe['Actors']:
-                    for recipeIndex in recipeIndexes:
-                        if recipe[recipeIndex] == ingredient:
-                            ingredientName = recipe[recipeIndex]
-                            recipeIndexes = [recipeIndex for recipeIndex in recipeIndexes if not recipe[recipeIndex] == ingredientName]
-                            hasMatched = True
-                            break
-                    if hasMatched: break
-                if not hasMatched: continue
-            if 'Tags' in checkRecipe and checkRecipe['Tags'] != []:
-                hasMatched = False
-                for tag in checkRecipe['Tags']:
-                    if tag == []:
-                        continue
-                    else:
-                        tag = tag[0]
-                    for recipeIndex in recipeIndexes:
-                        if tag in recipeTags[recipeIndex]:
-                            ingredientName = recipe[recipeIndex]
-                            recipeIndexes = [recipeIndex for recipeIndex in recipeIndexes if not recipe[recipeIndex] == ingredientName]
-                            hasMatched = True
-                            break
-                    if hasMatched: break
-                if not hasMatched: continue
-            if checkRecipe['Recipe'] != "Fairy Tonic":
-                recipeName = addRecipePrefix(checkRecipe['Recipe'], effectType)
-            else:
-                recipeName = checkRecipe['Recipe']
-            if recipeName == "Elixir": 
-                recipeName = "Dubious Food"
-            if recipeName == "Rock-Hard Food":
-                cookValue = 1
-            elif recipeName == "Dubious Food":
-                cookValue = dubiousValue
-            
-            if 'HB' in checkRecipe: cookValue += int(checkRecipe['HB'])
-            if critChance == 100 and (effectType == "None" or effectType == False):
-                cookValue += 12
-                if cookValue > 120: cookValue = 120
-            return [{'recipeName': recipeName, 'recipe': recipe, 'recipeIndexes': ingredientIndexes, 'cookValue': cookValue, 'critChance': critChance, 'effectType': effectType}]
-
+# DO NOT TOUCH THIS
+def legacy_match_recipe(cookData, recipe, recipeTags):
     for checkRecipe in cookData['Recipes']:
         hasMatched = True
         recipeIndexes = set(range(len(recipe)))
@@ -330,26 +130,186 @@ def verifyRecipe(cookData, materialData, materialsList: list):
                     if hasMatched: break
                 if not hasMatched: break
             if not hasMatched: continue
-        if checkRecipe['Recipe'] != "Fairy Tonic" and checkRecipe['Recipe'] != "Dubious Food" and checkRecipe['Recipe'] != "Rock-Hard Food":
-            recipeName = addRecipePrefix(checkRecipe['Recipe'], effectType)
-        else:
-            recipeName = checkRecipe['Recipe']
-        if recipeName == "Elixir": 
-            recipeName = "Dubious Food"
-        if recipeName == "Rock-Hard Food":
-            cookValue = 1
-        elif recipeName == "Dubious Food":
-            cookValue = dubiousValue
-        
-        if 'HB' in checkRecipe: cookValue += int(checkRecipe['HB'])
-        if critChance == 100 and (effectType == "None" or effectType == False):
-            cookValue += 12
-        if cookValue > 120: cookValue = 120
-        rtv = [{'recipeName': recipeName, 'recipe': recipe, 'recipeIndexes': ingredientIndexes, 'cookValue': cookValue, 'critChance': critChance, 'effectType': effectType}]
-        #print(rtv)
-        return rtv
-    return [{'recipeName': "Dubious Food", 'recipe': recipe, 'recipeIndexes': ingredientIndexes, 'cookValue': dubiousValue, 'critChance': 0, 'effectType': "None"}]
+        return checkRecipe
+    return {"Recipe": "Dubious Food"}
 
+######### LEGACY END
+
+HEARTY_VALUES = {
+    "Big Hearty Radish":      20,
+    "Big Hearty Truffle":     16,
+    "Hearty Bass":             8,
+    "Hearty Blueshell Snail": 12,
+    "Hearty Durian":          16,
+    "Hearty Lizard":          16,
+    "Hearty Radish":          12,
+    "Hearty Salmon":          16,
+    "Hearty Truffle":          4
+}
+
+
+def parse_ingredient(ingredient):
+    if ingredient.lower() == "<invalid>":
+        ingredient = "paraglider"
+    return ingredient.lower()
+
+def parse_recipe(recipe, materialData):
+    materialsList = []
+    recipeSlots = [parse_ingredient(ingredient.strip()) for ingredient in recipe.split(',')]
+    if len(recipeSlots) > 5: raise Exception("Recipes can have at most 5 ingredients")
+    
+    for ingredient in recipeSlots:
+        for i, material in enumerate(materialData):
+            if material['Name'].lower() == ingredient:
+                materialsList.append([i])
+                break
+        else:
+            raise Exception("\"" + ingredient + "\" is not a recognized material name")
+    
+    return materialsList
+
+def get_price(NMMR, ingredientIndexes, materialData, count):
+    buyTotal, sellTotal = 0, 0
+    for ingredientIndex in ingredientIndexes:
+        material = materialData[ingredientIndex]
+        if "CookLowPrice" in material['Tags']:
+            buyTotal += 1
+            sellTotal += 1
+        else:
+            buyTotal += material['BuyingPrice']
+            sellTotal += material['SellingPrice']
+    return legacy_get_price(NMMR, sellTotal, buyTotal, count) 
+
+def compute_recipe(NMMR, cookData, materialData, materialsList: list):
+    effectType, numUnique, recipe, recipeTags, ingredientIndexes = False, 0, [], [], []
+    
+    materialsList = materialsList.copy()
+    # value if normal food, no crit
+    base_hp = 0
+    # value if dubious food
+    dubious_hp = 0
+    # value if hearty food
+    hearty_hp = 0
+    # chance of crit. -1 = guaranteed not crit, 0-99 = rng, 100+ = guaranteed crit
+    crit_chance = 0
+    # chance of monster extract rng.
+    # -1 = not used
+    #  0 = has monster extract, rng between lo, mid, hi (regular food)
+    #  1 = has monster extract, rng between lo, hi      (fairy tonic)
+    monster_extract_mode = -1
+
+    for l in materialsList:
+        if len(l) != 1:
+            assert False
+    
+    # Compute effect, base_hp, and dubious_hp
+    for materialNameIndex in range(len(materialsList)):
+        material = materialData[materialsList[materialNameIndex][0]]
+        ingredientIndexes.append(materialsList[materialNameIndex][0])
+        recipe.append(material['Name'])
+        if material["Name"] == "Monster Extract":
+            monster_extract_mode = 0
+
+        if material['EffectType'] != "None":
+            if effectType == False and material['EffectType'] != "None":
+                effectType = material['EffectType']
+            elif effectType != "None" and effectType != False and material['EffectType'] != effectType:
+                effectType = "None"
+
+        dubious_hp += material['HitPointRecover']
+        base_hp += material['HitPointRecover'] * 2
+        if material['EffectType'] == "LifeMaxUp":
+            hearty_hp += HEARTY_VALUES[material["Name"]]
+        if materialsList.index(materialsList[materialNameIndex]) == materialNameIndex:
+            base_hp += int(material['BoostHitPointRecover'])
+            crit_chance += material['BoostSuccessRate']
+            numUnique += 1
+        recipeTags.append(material['Tags'])
+
+    base_hp = min(base_hp, 120)
+    dubious_hp = max(4, min(dubious_hp, 120))
+
+    # Match recipe
+    if numUnique == 1:
+        matched_recipe = legacy_match_single_recipe(cookData, recipe, recipeTags)
+    else:
+        matched_recipe = legacy_match_recipe(cookData, recipe, recipeTags)
+
+    has_no_effect = effectType == False or effectType == "None"
+    is_hearty_food = effectType == "LifeMaxUp"
+    crit_hp_coost = 4 if is_hearty_food else 12
+    
+    if matched_recipe['Recipe'] == "Dubious Food" or (matched_recipe["Recipe"] == "Elixir" and has_no_effect):
+        # dubious food handler
+        base_hp = dubious_hp            # Use dubious food formula for hp
+        price = 2                       # Fix price as 2
+        crit_chance = -1                # cannot crit
+        monster_extract_mode = -1       # cannot use monster extract rng
+
+    elif matched_recipe["Recipe"] == "Rock-Hard Food":
+        # rock hard food handler
+        base_hp = 1                     # Fix hp as 1
+        price = 2                       # Fix price as 2
+        crit_chance = -1                # cannot crit
+        monster_extract_mode = -1       # cannot use monster extract rng
+
+    elif matched_recipe['Recipe'] == "Fairy Tonic":
+        # fairy tonic handler
+                                        # base_hp is unchanged
+        price = 2                       # Fix price as 2
+                                        # can crit
+        if monster_extract_mode == 0:
+            monster_extract_mode = 1    # monster extract rng lo or hi
+
+    else:
+        # Compute normal recipe price
+        price = get_price(NMMR, ingredientIndexes, materialData, len(recipe))
+        if is_hearty_food:
+            # hearty handler
+            base_hp = hearty_hp         # Set base hp as hearty hp
+                                        # price unchanged
+                                        # can crit
+                                        # monster extract mode unchanged
+            # all other recipes
+                                        # base_hp unchanged
+                                        # price unchanged
+                                        # can crit
+                                        # monster extract mode unchanged
+    # Recipe Heart Boost
+    if 'HB' in matched_recipe: 
+        base_hp = min(base_hp+int(matched_recipe['HB']), 120) 
+    
+    # Compute crit_hp, which is critial success hp under regular conditions
+    crit_hp = base_hp
+    if crit_chance == -1:
+        # guaranteed not crit
+        pass
+
+    elif crit_chance < 100:
+        # rng crit
+        crit_hp = min(base_hp+crit_hp_coost, 120)
+    elif crit_chance == 100:
+        # guaranteed crit
+        if has_no_effect or is_hearty_food:
+            # guaranteed heart crit
+            base_hp = min(base_hp+crit_hp_coost, 120)
+            crit_hp = base_hp
+
+    # Compute low_hp and handle monster extract
+    low_hp = base_hp
+    if monster_extract_mode == 0:
+        # regular monster extract mode, lowest is 1, crit unchanged
+        low_hp = 1
+    elif monster_extract_mode == 1:
+        # either lo or hi
+        # set lo to 1
+        low_hp = 1
+        # set base to crit
+        base_hp = crit_hp
+
+    return base_hp, price, crit_hp != base_hp, is_hearty_food, low_hp != base_hp
+
+# returns base_hp, price, crit_flag, hearty_flag, monster_flag
 def process_recipe(recipe_data, recipe_str):
 
     recipeData = recipe_data
@@ -360,59 +320,9 @@ def process_recipe(recipe_data, recipe_str):
     for NMMRIndex in range(len(NMMR)):
         NMMR[NMMRIndex] = np.float32(NMMR[NMMRIndex])
 
-    results = []
-    def checkResults(resultRecipes):
-        for resultRecipe in resultRecipes:
-            buyTotal, sellTotal = 0, 0
-            for ingredientIndex in resultRecipe['recipeIndexes']:
-                material = materialData[ingredientIndex]
-                if "CookLowPrice" in material['Tags']:
-                    buyTotal += 1
-                    sellTotal += 1
-                else:
-                    buyTotal += material['BuyingPrice']
-                    sellTotal += material['SellingPrice']
-            if resultRecipe['recipeName'] != "Fairy Tonic" and resultRecipe['recipeName'] != "Dubious Food" and resultRecipe['recipeName'] != "Rock-Hard Food":
-                price = getPrice(NMMR, sellTotal, buyTotal, len(resultRecipe['recipe']))
-            else:
-                price = 2
-            #if resultRecipe['recipeName'] == "Dubious Food":
-            #    resultRecipe['cookValue']
-            if resultRecipe['recipeName'] != "Dubious Food" and resultRecipe['recipeName'] != "Rock-Hard Food":
-                valWithCrit = resultRecipe['cookValue']
-                if resultRecipe['critChance'] < 100 or (resultRecipe['effectType'] != "None" and resultRecipe['effectType'] != False): valWithCrit += 12
-                if valWithCrit > 120: valWithCrit = 120
-            else:
-                valWithCrit = resultRecipe['cookValue']
-            
-            results.append((valWithCrit, resultRecipe['cookValue'], price, resultRecipe['recipe'],resultRecipe['recipeName'], resultRecipe['recipeIndexes']))
+    materialsList = parse_recipe(recipe_str, materialData)
 
-    (materialsList, materialDifferGroups, materialSameGroups) = parseRecipe(recipe_str, materialData)
-
-
-    for l in materialsList:
-        if len(l) != 1:
-            raise ValueError(f"length not 1: {l} for input str {recipe_str}")
-
-
-    resultRecipes = verifyRecipe(
-        cookData, 
-        materialData, 
-        materialsList)
-    if not resultRecipes:
-        raise ValueError(f"resultRecipes is empty for ")
-    #print(resultRecipes)
-    checkResults(resultRecipes)
-
-    
-    if len(results) != 1:
-        raise ValueError(f"Uhhhh length {len(results)} for {materialsList} for {recipe_str} but early")
-    results = [result for resultCount, result in enumerate(results) if resultCount == 0 or results[resultCount - 1][5] != result[5]]
-    if len(results) != 1:
-        raise ValueError(f"Uhhhh length {len(results)} for {materialsList} for {recipe_str}")
-    recipe = results[0]
-   
-    return recipe[0], recipe[1], recipe[2]
+    return compute_recipe(NMMR, cookData, materialData, materialsList)
 
 if __name__ == "__main__":
     with open("recipeData.json", "r", encoding="utf-8") as recipe_file:

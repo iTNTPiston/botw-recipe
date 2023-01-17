@@ -45,8 +45,8 @@ pub fn get_chunk_seq(chunk_id: usize) -> Result<BufReader<File>, String> {
 
 fn get_chunk_filename(chunk_id: usize) -> String {
     if chunk_id < 10 {
-        format!("dump/data/main0{}.db", chunk_id)
+        format!("data/main0{}.db", chunk_id)
     } else {
-        format!("dump/data/main{}.db", chunk_id)
+        format!("data/main{}.db", chunk_id)
     }
 }

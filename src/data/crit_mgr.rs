@@ -47,7 +47,7 @@ impl CritMgr {
     }
     fn load_chunk(&mut self, chunk_id: usize) {
         let start = chunk_id*CRIT_CHUNK_SIZE;
-        let file = RandomAccessFile::open("dump/data/crit.db").unwrap_or_else(|_| panic!("Cannot open crit db"));
+        let file = RandomAccessFile::open("data/crit.db").unwrap_or_else(|_| panic!("Cannot open crit db"));
         let mut buf = [0; CRIT_CHUNK_SIZE];
         let bytes_read = file.read_at(start as u64, &mut buf).unwrap_or_else(|_| panic!("Error reading crit db"));
         self.loaded.insert(chunk_id);

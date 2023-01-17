@@ -8,8 +8,8 @@ pub mod database;
 pub mod processing;
 
 pub const RECORD_SIZE: usize = 2;
-pub const CHUNK_SIZE: usize = 137273177;
 pub const NUM_RECORD: u64 = 4392741639; // binomial(219+5-1,5)
+pub const CHUNK_SIZE: usize = 137273177; // ceil(NUM_RECORD / 32)
 
 /// Type of a record in main db
 pub struct RecipeData {

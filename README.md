@@ -18,42 +18,45 @@ Install Rust: https://www.rust-lang.org/tools/install
 ### Prepare Data
 First we need to prepare the database. 
 
-You can either dump the data yourself with the tools provided (Python needed), or download from [here (link will be provided in the future, see NOTE at the top)]() (around 900MB compressed and 9GB decompressed). You will see some `*.db` files in the downloaded zip. Extract the zip and put the `*.db` files in `dump/data/`
+You can either dump the data yourself with the tools provided (Python needed), or download from [here (link will be provided in the future, see NOTE at the top)]() (around 900MB compressed and 9GB decompressed). You will see some `*.db` files in the downloaded zip. Extract the zip and put the `data/` folder with the `*.db` files in it at the root of the repo like below
+```
+botw-recipe
+├───data
+│   ├───crit.db
+│   ├───main00.db
+│   ├───main01.db
+│   └───...
+├───dump
+├───presets
+├───src
+│   ├───command
+│   └───data
+...
+```
 
 ### Dumping Data (Optional)
 You can skip this section if you have downloaded the data. This is for dumping the data manually.
 
 **Note: This is extremely slow due to the large amount of data and the inefficiency of the recipe script, you should avoid dumping the data manually if possible**
 
-0. You need to have python installed and have the `bitarray` wheel
-    ```
-    pip install bitarray
-    ```
-1. Go into the `dump` directory and make `parts` and `data` directories
-    ```
+0. Have Python installed
+1. Go into the `dump` directory
+    ```bash
     cd dump
-    mkdir data
-    mkdir parts
     ```
-2. **To automatically dump everything:** This might take a couple days depending on your computer and you might not be able to use the computer while the program is running
+2. (Optional) Setup and activate a python virtual environment. Below uses venv on a Windows system
     ```
-    python dump_runner.py
+    python -m venv venv
+    .\venv\Scripts\Activate
     ```
-3. **To manually dump by section:** You can run the following commands to dump section by section. There are 88 sections in total (numbered 0 through 87)
+3. Install dependencies
     ```
-    python dump.py 0
-    python dump.py 1
-    python dump.py 2
-    python dump.py 3
-    ...
-    python dump.py 87
+    pip install -r requirements.txt
     ```
-4. After dumping, run these scripts to clean things up
+4. Run the following command to kick off the process. This might take a couple days depending on your computer (10 hours for me) and you might not be able to use the computer while the program is running
     ```
-    python combinecrit.py
-    python combinemain.py
+    python dump.py
     ```
-5. After checking that the data is good (see next section), you can delete the `parts` folder after this
 
 ### Checking Data
 Run the check script to verify that your data is good after you either dumped or downloaded it
