@@ -1,8 +1,11 @@
-/target
+target/
 *.db
 __pycache__/
 venv/
 *.zip
-/temp
+temp/
 *.bin
 *.yaml
+
+node_modules/
+adapters/

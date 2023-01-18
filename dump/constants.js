@@ -1,0 +1,9 @@
+exports.Num_Normal_Ingredients=149;
+exports.Num_Cooked_Ingredients=62;
+exports.Num_Ingredients_Total=213;
+exports.Num_Ingredients_Max=5;
+exports.Num_Recipe_Total=3827930778;
+exports.Main_Record_Size=3;
+exports.Num_Parts=32;
+exports.Num_Recipe_Per_Part=119622837;
+exports.Num_Recipe_Last_Part=119622831;

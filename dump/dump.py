@@ -1,63 +1,20 @@
 import json
-import bitarray
 import sys
-import signal
 import os
-from multiprocessing import Pool, RLock, Manager, freeze_support
-from find_recipes_simple import process_recipe
-from tqdm import tqdm, trange
+from multiprocessing import Pool, RLock, freeze_support
+from tqdm import tqdm
 from constants import Num_Ingredients_Max, Num_Parts, Num_Ingredients_Total, Num_Recipe_Per_Part, Num_Recipe_Last_Part, Main_Record_Size
+from brkirch import BrkirchRecipeAdapter
+# This script produces data folder which contains the database in 32 parts
 
-# This script produces data folder which contains 3 databases:
-# main db: This is the database containing the non-crit hp value and price for every recipe
-# crit db: This is the database containing if the crit hp of a recipe is different from non-crit hp
-# four db: This is the database containing if the crit hp of a recipe is 4 more than the base hp
+DEBUG = False
 
 DATA_DIR = "../data"
-
-def count_one_bit(i):
-    if i < 0:
-        raise ValueError(f"negative {i=}")
-    count = 0
-    while i > 0:
-        if (i & 1):
-            count += 1
-        i = i >> 1
-    return count
-
-# Adapters should all have get_data(liss_of_items) -> base_hp, price, crit_flag, hearty_flag, monster_flag interface
-class AbstractAdapter:
-    def cook(self, items):
-        base_hp, price, crit_flag, hearty_flag, monster_flag = self.get_data(items)
-        assert 0 <= base_hp <= 120
-        lower_2_bytes = ((price << 7) + base_hp) & 0xFFFF
-        crit_flag = 1 << 22 if crit_flag else 0
-        hearty_flag = 1 << 21 if hearty_flag else 0
-        monster_flag = 1 << 20 if monster_flag else 0
-
-        lower_23_bits = lower_2_bytes | crit_flag | hearty_flag | monster_flag
-        # if lower 23 bits has odd number of 1s, set parity bit to 1
-        parity_bit = 1 << 23 if (count_one_bit(lower_23_bits) & 1) else 0
-        return parity_bit | lower_23_bits
-
-    def get_data(self, items):
-        pass
-
-class BrkirchRecipeAdapter(AbstractAdapter):
-    def __init__(self):
-        super().__init__()
-        with open("recipeData.json", "r", encoding="utf-8") as recipe_file:
-            self.recipe_data = json.load(recipe_file)
-
-    def get_data(self, items):
-        if not items:
-            return 0, 0, False, False, False
-        item_str = ",".join(items)
-        return process_recipe(self.recipe_data, item_str)
 
 def get_adapter(id):
     if id == "brkirch":
         return BrkirchRecipeAdapter()
+
     raise ValueError(f"Invalid adapter {id=}")
 
 def array2d(first_order, second_order):
@@ -98,9 +55,6 @@ class RecipeIterator:
         
         self.data = data
         self.total = data[Num_Ingredients_Max][self.num_items]
-    
-    def get_total(self):
-        return self.total
         
     def __iter__(self):
         return self
@@ -144,31 +98,38 @@ def run_dump(task):
         id_data_dict = json.load(ids_file)
     id_data = []
     for k in id_data_dict:
-        id_data.append(id_data_dict[k])
+        if id_data_dict[k] == "<Invalid>":
+            id_data.append("Paraglider")
+        else:
+            id_data.append(id_data_dict[k])
     assert len(id_data) == Num_Ingredients_Total
 
     # Create Adapter
+    with get_adapter(adapter_id) as adapter:
 
-    adapter = get_adapter(adapter_id)
+        # Initialize Dumper
+        recipes = RecipeIterator(id_data, part*Num_Recipe_Per_Part,(part+1)*Num_Recipe_Per_Part)
 
-    # Initialize Dumper
+        # Set up tqdm for progress reporting
 
-    recipes = RecipeIterator(id_data, part*Num_Recipe_Per_Part,(part+1)*Num_Recipe_Per_Part)
+        total = Num_Recipe_Last_Part if part == Num_Parts-1 else Num_Recipe_Per_Part
+        desc = f"Part {part:02}"
 
-    # Set up tqdm for progress reporting
-
-    total = Num_Recipe_Last_Part if part == Num_Parts-1 else Num_Recipe_Per_Part
-    desc = f"Part {part:02}"
-
-    try:
-        with open(os.path.join(DATA_DIR, f"{part:02}.db"), "wb") as main_db:
-            for recipe in tqdm(recipes, total=total, desc=desc, position=part):
-                # get recipe from adapter
-                main_data = adapter.cook(recipe)
-                # write main_db. python io is buffered by default
-                main_db.write(bytearray(main_data.to_bytes(Main_Record_Size, "big")))
-    except KeyboardInterrupt:
-        pass
+        try:
+            with open(os.path.join(DATA_DIR, f"{part:02}.db"), "wb") as main_db:
+                
+                for recipe in tqdm(recipes, total=total, desc=desc, position=part):
+                    if DEBUG:
+                        with open(os.path.join(DATA_DIR, f"{part:02}.log"), "w+") as log:
+                            recipe_str = ",".join(recipe)
+                            log.write(recipe_str)
+                    # get recipe from adapter
+                    
+                    main_data = adapter.cook(recipe)
+                    # write main_db. python io is buffered by default
+                    main_db.write(bytearray(main_data.to_bytes(Main_Record_Size, "big")))
+        except KeyboardInterrupt:
+            pass
 
 def run_multi(adapter_id):
     # Check if output exists
@@ -194,7 +155,12 @@ def run_multi(adapter_id):
     try:
         with Pool(initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as p:
             for _ in p.imap_unordered(run_dump, jobs()):
-                pass
+                if os.name == 'nt':
+                    os.system('cls')
+                # for mac and linux(here, os.name is 'posix')
+                else:
+                    os.system('clear')
+        print("All Done! Run python3 check.py to verify the dumped data is good")
     except KeyboardInterrupt:
         if os.name == 'nt':
             os.system('cls')
@@ -202,9 +168,8 @@ def run_multi(adapter_id):
         else:
             os.system('clear')
         print("Interrupted!")
-        sys.exit(1)
 
-    print("All Done! Run python3 check.py to verify the dumped data is good")
+    
 
 if __name__ == "__main__":
     freeze_support()

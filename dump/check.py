@@ -5,7 +5,6 @@ import multiprocessing
 from os.path import isfile
 BLOCK = 4096
 HASHES = {
-    "crit": "d6703a7cea871149478f7dcc3c03c80a133db3eddb4eeff79af81408820ba274",
     "00":   "4DDB5EC55BE045D1EE614AD823DE0CD4557A6871181ECA1A642111B809A0C20F",
     "01":   "73a946f4e9252145fc23635bf7d39795a52ae0a7c6a4ffc1cb3a4dee22b7df48",
     "02":   "70306e1547ec56cdbd189cfaa66dccfe3043ad236a9940b69826f65fef4a4e9c",
@@ -82,32 +81,10 @@ def verify_maindb(idx):
     print(f"{file_name}: {hash.lower()}")
     return None
     
-def verify_critdb():
-    file_name = f"data/crit.db"
-    if not isfile(file_name):
-        return f"ERROR: {file_name} is missing"
 
-    sha = hashlib.sha256()
-    # https://www.quickprogrammingtips.com/python/how-to-calculate-sha256-hash-of-a-file-in-python.html
-    with open(file_name, "rb") as f:
-        for byte_block in iter(lambda: f.read(BLOCK), b""):
-            sha.update(byte_block)
-    hash = sha.hexdigest()
-    hash_result = verify_hash(file_name, HASHES["crit"], hash)
-    if hash_result:
-        return hash_result
-
-    print(f"{file_name}: {hash.lower()}")
-    return None
     
 
 if __name__ == "__main__":
-    print("Checking crit db")
-    crit_result = verify_critdb()
-    if crit_result:
-        print(crit_result)
-        sys.exit(1)
-    
     print("Checking main db")
     errors = []
     with multiprocessing.Pool() as pool:

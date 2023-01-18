@@ -41,7 +41,8 @@
 
 import numpy as np
 import json
-import sys
+
+from adapter import BaseAdapter, bootstrap
 
 ######### LEGACY START
 
@@ -149,8 +150,6 @@ HEARTY_VALUES = {
 
 
 def parse_ingredient(ingredient):
-    if ingredient.lower() == "<invalid>":
-        ingredient = "paraglider"
     return ingredient.lower()
 
 def parse_recipe(recipe, materialData):
@@ -324,7 +323,16 @@ def process_recipe(recipe_data, recipe_str):
 
     return compute_recipe(NMMR, cookData, materialData, materialsList)
 
+class BrkirchRecipeAdapter(BaseAdapter):
+    def __enter__(self):
+        super().__enter__()
+        with open("recipeData.json", "r", encoding="utf-8") as recipe_file:
+            self.recipe_data = json.load(recipe_file)
+        return self
+
+    def get_data(self, items):
+        item_str = ",".join(items)
+        return process_recipe(self.recipe_data, item_str)
+
 if __name__ == "__main__":
-    with open("recipeData.json", "r", encoding="utf-8") as recipe_file:
-        recipe_data = json.load(recipe_file)
-    print(process_recipe(recipe_data, sys.argv[1]))
+    bootstrap(BrkirchRecipeAdapter)

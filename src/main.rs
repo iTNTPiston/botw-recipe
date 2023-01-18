@@ -25,7 +25,7 @@ fn repl() {
     let mut crit_mgr = data::CritMgr::new();
     
     let converter = recipe::RecipeConverter::new();
-    //println!("{:?}", converter.to_material_ids(750363977));
+    println!("{:?}", converter.to_material_ids(2));
     let running = Arc::new(AtomicBool::new(false));
     let can_interrupt = set_interrupt(running.clone()).is_ok();
 
