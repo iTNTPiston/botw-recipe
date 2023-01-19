@@ -35,28 +35,7 @@ botw-recipe
 ```
 
 ### Dumping Data (Optional)
-You can skip this section if you have downloaded the data. This is for dumping the data manually.
 
-**Note: This is extremely slow due to the large amount of data and the inefficiency of the recipe script, you should avoid dumping the data manually if possible**
-
-0. Have Python installed
-1. Go into the `dump` directory
-    ```bash
-    cd dump
-    ```
-2. (Optional) Setup and activate a python virtual environment. Below uses venv on a Windows system
-    ```
-    python -m venv venv
-    .\venv\Scripts\Activate
-    ```
-3. Install dependencies
-    ```
-    pip install -r requirements.txt
-    ```
-4. Run the following command to kick off the process. This might take a couple days depending on your computer (10 hours for me) and you might not be able to use the computer while the program is running
-    ```
-    python dump.py
-    ```
 
 ### Checking Data
 Run the check script to verify that your data is good after you either dumped or downloaded it

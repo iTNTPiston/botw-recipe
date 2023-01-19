@@ -1,4 +1,3 @@
 bitarray
 tqdm
 numpy
-dukpy

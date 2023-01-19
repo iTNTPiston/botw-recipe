@@ -7,7 +7,7 @@ const pot = new CookingData();
 const fs = require("fs");
 
 const { spawn } = require('child_process');
-const { convert_to_record, assert } = require("./adapter.js");
+const { convert_to_record, assert, to_3_bytes_be } = require("./adapter.js");
 
 // This script produces data folder which contains the database in 32 parts
 
@@ -181,7 +181,7 @@ function run_dump(part){
     }
 
     fs.writeFileSync(DATA_DIR+"/"+partStr+".db", buffer);
-    console.log(`${desc}: 100%                                                              `);
+    console.log(`                                                                          `);
 }
     
 
@@ -217,6 +217,7 @@ function run_multi(){
     }
 
 }
+
 if (process.argv[1].endsWith("dump.js")){
     if (process.argv.length === 2){
         run_multi();

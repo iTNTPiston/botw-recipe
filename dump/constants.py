@@ -12,16 +12,7 @@ def binomial(n, k):
 # Num_Ingredients_Total multichoose Num_Ingredients_Max
 Num_Recipe_Total = binomial(Num_Ingredients_Total+Num_Ingredients_Max-1, Num_Ingredients_Max)
 
-# db layout (each letter is one bit)
-# ixhm ____ pppp pppp phhh hhh
-# i - parity bit. Total number of 1s in the 3-byte (including parity bit) should be even
-# x - crit bit. If set, the recipe has rng heart value
-# h - hearty bit. If set, the recipe adds 4 instead of 12 when calculating crit heart
-# m - monster extract bit. If set, the recipe might give hp=1
-# _ - reserved for future use
-# p - (9 bits), lower 9 bits of the price
-# h - (7 bits), unsigned (base) heart value
-
+# See README.md for the layout
 Main_Record_Size = 3
 
 # Split main db into 32 parts

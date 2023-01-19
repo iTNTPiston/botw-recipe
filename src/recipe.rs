@@ -1,7 +1,7 @@
 use std::fs;
 use bit_set::BitSet;
 
-pub const NUM_ITEMS: usize = 219;
+pub const NUM_ITEMS: usize = 213;
 pub const NUM_INGR: usize = 5;
 const EMPTY_STRING: String = String::new();
 

@@ -152,20 +152,11 @@ HEARTY_VALUES = {
 def parse_ingredient(ingredient):
     return ingredient.lower()
 
-def parse_recipe(recipe, materialData):
-    materialsList = []
+def parse_recipe(recipe, material_name_map):
     recipeSlots = [parse_ingredient(ingredient.strip()) for ingredient in recipe.split(',')]
     if len(recipeSlots) > 5: raise Exception("Recipes can have at most 5 ingredients")
     
-    for ingredient in recipeSlots:
-        for i, material in enumerate(materialData):
-            if material['Name'].lower() == ingredient:
-                materialsList.append([i])
-                break
-        else:
-            raise Exception("\"" + ingredient + "\" is not a recognized material name")
-    
-    return materialsList
+    return [ material_name_map[name] for name in recipeSlots ]
 
 def get_price(NMMR, ingredientIndexes, materialData, count):
     buyTotal, sellTotal = 0, 0
@@ -179,10 +170,8 @@ def get_price(NMMR, ingredientIndexes, materialData, count):
             sellTotal += material['SellingPrice']
     return legacy_get_price(NMMR, sellTotal, buyTotal, count) 
 
-def compute_recipe(NMMR, cookData, materialData, materialsList: list):
-    effectType, numUnique, recipe, recipeTags, ingredientIndexes = False, 0, [], [], []
-    
-    materialsList = materialsList.copy()
+def compute_recipe(NMMR, cookData, materialData, ingredientIndexes: list):
+    effectType, numUnique, recipe, recipeTags = False, 0, [], []
     # value if normal food, no crit
     base_hp = 0
     # value if dubious food
@@ -196,15 +185,11 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
     #  0 = has monster extract, rng between lo, mid, hi (regular food)
     #  1 = has monster extract, rng between lo, hi      (fairy tonic)
     monster_extract_mode = -1
-
-    for l in materialsList:
-        if len(l) != 1:
-            assert False
     
     # Compute effect, base_hp, and dubious_hp
-    for materialNameIndex in range(len(materialsList)):
-        material = materialData[materialsList[materialNameIndex][0]]
-        ingredientIndexes.append(materialsList[materialNameIndex][0])
+    for i, materialNameIndex in enumerate(ingredientIndexes):
+        material = materialData[materialNameIndex]
+
         recipe.append(material['Name'])
         if material["Name"] == "Monster Extract":
             monster_extract_mode = 0
@@ -219,7 +204,7 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
         base_hp += material['HitPointRecover'] * 2
         if material['EffectType'] == "LifeMaxUp":
             hearty_hp += HEARTY_VALUES[material["Name"]]
-        if materialsList.index(materialsList[materialNameIndex]) == materialNameIndex:
+        if ingredientIndexes.index(materialNameIndex) == i:
             base_hp += int(material['BoostHitPointRecover'])
             crit_chance += material['BoostSuccessRate']
             numUnique += 1
@@ -228,22 +213,26 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
     base_hp = min(base_hp, 120)
     dubious_hp = max(4, min(dubious_hp, 120))
 
+    #print(base_hp)
+
     # Match recipe
     if numUnique == 1:
         matched_recipe = legacy_match_single_recipe(cookData, recipe, recipeTags)
     else:
         matched_recipe = legacy_match_recipe(cookData, recipe, recipeTags)
 
-    has_no_effect = effectType == False or effectType == "None"
-    is_hearty_food = effectType == "LifeMaxUp"
-    crit_hp_coost = 4 if is_hearty_food else 12
+    #print(crit_chance)
+
+    if not effectType:
+        effectType = "None"
     
-    if matched_recipe['Recipe'] == "Dubious Food" or (matched_recipe["Recipe"] == "Elixir" and has_no_effect):
+    if matched_recipe['Recipe'] == "Dubious Food" or (matched_recipe["Recipe"] == "Elixir" and effectType == "None"):
         # dubious food handler
         base_hp = dubious_hp            # Use dubious food formula for hp
         price = 2                       # Fix price as 2
         crit_chance = -1                # cannot crit
         monster_extract_mode = -1       # cannot use monster extract rng
+        effectType = "None"
 
     elif matched_recipe["Recipe"] == "Rock-Hard Food":
         # rock hard food handler
@@ -251,6 +240,7 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
         price = 2                       # Fix price as 2
         crit_chance = -1                # cannot crit
         monster_extract_mode = -1       # cannot use monster extract rng
+        effectType = "None"
 
     elif matched_recipe['Recipe'] == "Fairy Tonic":
         # fairy tonic handler
@@ -259,11 +249,12 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
                                         # can crit
         if monster_extract_mode == 0:
             monster_extract_mode = 1    # monster extract rng lo or hi
+        effectType = "None"
 
     else:
         # Compute normal recipe price
         price = get_price(NMMR, ingredientIndexes, materialData, len(recipe))
-        if is_hearty_food:
+        if effectType == "LifeMaxUp":
             # hearty handler
             base_hp = hearty_hp         # Set base hp as hearty hp
                                         # price unchanged
@@ -274,6 +265,11 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
                                         # price unchanged
                                         # can crit
                                         # monster extract mode unchanged
+
+    has_no_effect = effectType == "None"
+    is_hearty_food = effectType == "LifeMaxUp"
+    crit_hp_coost = 4 if is_hearty_food else 12
+
     # Recipe Heart Boost
     if 'HB' in matched_recipe: 
         base_hp = min(base_hp+int(matched_recipe['HB']), 120) 
@@ -287,12 +283,15 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
     elif crit_chance < 100:
         # rng crit
         crit_hp = min(base_hp+crit_hp_coost, 120)
-    elif crit_chance == 100:
+    elif crit_chance >= 100:
         # guaranteed crit
         if has_no_effect or is_hearty_food:
             # guaranteed heart crit
             base_hp = min(base_hp+crit_hp_coost, 120)
             crit_hp = base_hp
+        else:
+            # rng crit
+            crit_hp = min(base_hp+crit_hp_coost, 120)
 
     # Compute low_hp and handle monster extract
     low_hp = base_hp
@@ -309,7 +308,7 @@ def compute_recipe(NMMR, cookData, materialData, materialsList: list):
     return base_hp, price, crit_hp != base_hp, is_hearty_food, low_hp != base_hp
 
 # returns base_hp, price, crit_flag, hearty_flag, monster_flag
-def process_recipe(recipe_data, recipe_str):
+def process_recipe(recipe_data, material_name_map, recipe_str):
 
     recipeData = recipe_data
     materialData = recipeData[0]
@@ -319,7 +318,7 @@ def process_recipe(recipe_data, recipe_str):
     for NMMRIndex in range(len(NMMR)):
         NMMR[NMMRIndex] = np.float32(NMMR[NMMRIndex])
 
-    materialsList = parse_recipe(recipe_str, materialData)
+    materialsList = parse_recipe(recipe_str, material_name_map)
 
     return compute_recipe(NMMR, cookData, materialData, materialsList)
 
@@ -328,11 +327,17 @@ class BrkirchRecipeAdapter(BaseAdapter):
         super().__enter__()
         with open("recipeData.json", "r", encoding="utf-8") as recipe_file:
             self.recipe_data = json.load(recipe_file)
+        # make name map
+        material_data = self.recipe_data[0]
+        material_name_map = {}
+        for i, material in enumerate(material_data):
+            material_name_map[material['Name'].lower()] = i
+        self.material_name_map = material_name_map
         return self
 
     def get_data(self, items):
         item_str = ",".join(items)
-        return process_recipe(self.recipe_data, item_str)
+        return process_recipe(self.recipe_data, self.material_name_map, item_str)
 
 if __name__ == "__main__":
     bootstrap(BrkirchRecipeAdapter)
