@@ -222,7 +222,45 @@ if (process.argv[1].endsWith("dump.js")){
     if (process.argv.length === 2){
         run_multi();
     }else{
-        run_dump(parseInt(process.argv[2]));
+        // if (process.argv[2] === "test") {
+        //     const recipe = parseInt(process.argv[3]);
+        //     // Load the items
+        //     const id_data_dict = require("../ids.json");
+        //     const id_data = [];
+        //     for (let i=0;i<Num_Ingredients_Total;i++){
+        //         id_data.push("");
+        //     }
+        //     for (const k in id_data_dict){
+        //         if (id_data_dict[k] === "<Invalid>"){
+        //             id_data[k] = "Paraglider";
+        //         }else{
+        //             id_data[k] = id_data_dict[k];
+        //         }
+                
+        //     }
+        //     assert(id_data.length === Num_Ingredients_Total)
+
+        //     const i = 91250;
+
+        //     const adapter = new Adapter();
+        //     const recipes = new RecipeIterator(id_data, i,recipe+1);
+        //     let next = recipes.next();
+        //     console.log(next);
+        //     let prev = null;
+        //     let prevData = 0;
+        //     while(next!==undefined) {
+        //         prev = next;
+        //         prevData = adapter.cook(next);
+        //         next = recipes.next();
+        //     }
+        //     console.log(prev);
+        //     console.log(prevData);
+
+            
+        // }else{
+            run_dump(parseInt(process.argv[2]));
+        //}
+       
     }
 }
 

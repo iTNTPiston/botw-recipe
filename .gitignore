@@ -8,4 +8,5 @@ temp/
 *.yaml
 
 node_modules/
-adapters/
+
+diffs.json

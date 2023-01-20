@@ -47,10 +47,13 @@ from adapter import BaseAdapter, bootstrap
 ######### LEGACY START
 
 # DO NOT TOUCH THIS
-def legacy_get_price(NMMR, sellTotal, buyTotal, ingredientCount):
+def legacy_get_price(NMMR, sellTotalin, buyTotal, ingredientCount):
+    #print(f"{sellTotalin=}, {buyTotal=}")
+    #print(NMMR[ingredientCount - 1])
     if ingredientCount > 5:
         ingredientCount = 5
-    sellTotal = int(np.float32(sellTotal) * NMMR[ingredientCount - 1])
+    sellTotal = int(np.float32(sellTotalin) * NMMR[ingredientCount - 1])
+    #print(f"{int(np.float32(sellTotalin) * NMMR[ingredientCount - 1])=}")
     if sellTotal % 10 != 0:
         sellTotal += 10
         sellTotal -= (sellTotal % 10)
@@ -58,6 +61,7 @@ def legacy_get_price(NMMR, sellTotal, buyTotal, ingredientCount):
         sellTotal = buyTotal
     if sellTotal < 3:
         sellTotal = 2
+    #print(sellTotal)
     return sellTotal
 
 # DO NOT TOUCH THIS
@@ -210,7 +214,6 @@ def compute_recipe(NMMR, cookData, materialData, ingredientIndexes: list):
             numUnique += 1
         recipeTags.append(material['Tags'])
 
-    base_hp = min(base_hp, 120)
     dubious_hp = max(4, min(dubious_hp, 120))
 
     #print(base_hp)
@@ -252,27 +255,26 @@ def compute_recipe(NMMR, cookData, materialData, ingredientIndexes: list):
         effectType = "None"
 
     else:
+        # base_hp unchanged
         # Compute normal recipe price
         price = get_price(NMMR, ingredientIndexes, materialData, len(recipe))
-        if effectType == "LifeMaxUp":
-            # hearty handler
-            base_hp = hearty_hp         # Set base hp as hearty hp
-                                        # price unchanged
                                         # can crit
                                         # monster extract mode unchanged
-            # all other recipes
-                                        # base_hp unchanged
-                                        # price unchanged
-                                        # can crit
-                                        # monster extract mode unchanged
-
-    has_no_effect = effectType == "None"
-    is_hearty_food = effectType == "LifeMaxUp"
-    crit_hp_coost = 4 if is_hearty_food else 12
 
     # Recipe Heart Boost
     if 'HB' in matched_recipe: 
-        base_hp = min(base_hp+int(matched_recipe['HB']), 120) 
+        base_hp = base_hp + int(matched_recipe['HB'])
+
+    has_no_effect = effectType == "None"
+    is_hearty_food = effectType == "LifeMaxUp"
+    if is_hearty_food:
+        crit_hp_coost = 4
+        base_hp = hearty_hp
+    else:
+        crit_hp_coost = 12
+
+    # cap base_hp
+    base_hp = min(base_hp, 120)
     
     # Compute crit_hp, which is critial success hp under regular conditions
     crit_hp = base_hp

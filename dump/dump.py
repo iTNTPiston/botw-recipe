@@ -169,7 +169,6 @@ def run_multi(adapter_id):
             os.system('clear')
         print("Interrupted!")
 
-    
 
 if __name__ == "__main__":
     freeze_support()

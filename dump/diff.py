@@ -2,13 +2,14 @@
 import json
 import math
 import sys
+import os
 from tqdm import tqdm
 from multiprocessing import Pool, RLock
 from constants import Num_Parts, Main_Record_Size, Num_Recipe_Per_Part
 
 DATA_DIR = "../data"
 BLOCK = 3000
-LIMIT = 100
+LIMIT = 500
 
 def construct_record(block, i):
     record = 0
@@ -23,7 +24,7 @@ def analyze_record(record):
     hearty_flag = (record >> 21) & 1
     monster_flag = (record >> 20) & 1
     price = (record >> 7) & 0x1FF
-    base_hp = (record) & 0x7F
+    base_hp = record & 0x7F
     
     return (parity_bit, base_hp, price, bool(crit_flag), bool(hearty_flag), bool(monster_flag))
 
@@ -44,21 +45,31 @@ def get_diffs_maindb(task):
                 desc=str(idx)
                 ):
                 for i in range(int(BLOCK/Main_Record_Size)):
+                    if (i*Main_Record_Size) >= len(block1):
+                        break
                     r1 = construct_record(block1, i*Main_Record_Size)
                     r2 = construct_record(block2, i*Main_Record_Size)
                     if r1 != r2:
                         recipe = int(Num_Recipe_Per_Part*idx+block_idx*BLOCK/Main_Record_Size+i)
                         diffs.append((recipe, analyze_record(r1), analyze_record(r2)))
-                        if(len(diffs) > 100):
+                        if(len(diffs) >= 100):
                             return diffs, True
     
     return diffs, False
 
-def run_hash_dump(alt_dir):
+def clear():
+    if os.name == 'nt':
+        os.system('cls')
+    # for mac and linux(here, os.name is 'posix')
+    else:
+        os.system('clear')
+
+def run_diff_dump(alt_dir):
     diffs = {}
     jobs = [ (alt_dir, i) for i in range(Num_Parts) ]
     count = 0
     capped = False
+    clear()
     tqdm.set_lock(RLock())  # for managing output contention
     with Pool(initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),)) as p:
         for i, x in enumerate(p.map(get_diffs_maindb, jobs)):
@@ -67,13 +78,15 @@ def run_hash_dump(alt_dir):
                 capped = True
             diffs[f"{i:02}"] = child_diffs
             count += len(child_diffs)
+            clear()
     with open("diffs.json", "w+", encoding="utf-8") as json_file:
         json.dump(diffs, json_file, indent=2)
 
+    clear()
     print(f"{count} diffs saved to diffs.json")
     if capped:
         print("Not all data are processed because the limit has been reached")
 
 if __name__ == "__main__":
-    run_hash_dump(sys.argv[1])
+    run_diff_dump(sys.argv[1])
    
