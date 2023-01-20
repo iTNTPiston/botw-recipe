@@ -90,6 +90,11 @@ pip install -r requirements.txt
 
 This is the recommended way as it is around 5x faster than dumping with brkirch's script.
 1. Have [NodeJS](https://nodejs.org/en/) and Python installed as described above. All commands below should be ran in the `dump` directory
+2. Get the script from savage's repo
+    ```
+    wget -O bundle.js https://raw.githubusercontent.com/savage13/cooking/main/bundle.js
+    ```
+2. Change `export{CookingData,botw_sort};` to `exports.CookingData=CookingData;` at the end of the script
 2. Start dumping
     ```
     node dump.js
@@ -124,6 +129,4 @@ Other stuff for development
 #### Other Scripts
 - `python hash.py` to generate `hash.json` based on dumped data
 - `python diff.py ../data_another` to compare 2 databases
-#### Updateing Savage's script
-1. `wget -O bundle.js https://raw.githubusercontent.com/savage13/cooking/main/bundle.js`
-2. Change `export{CookingData,botw_sort};` to `exports.CookingData=CookingData;` at the end of the script
+
